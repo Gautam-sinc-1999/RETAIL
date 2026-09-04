@@ -24,7 +24,7 @@ venv/Scripts/streamlit run app.py
 
 Three modes in the sidebar:
 
-- **Analyze a CSV** — upload any transaction file, pick an account, run the live pipeline.
+- **Analyze a CSV** — upload any transaction file, pick an account, run the live pipeline, and download a PDF report (executive brief or full dossier).
 - **Answer Key validation** — run the agent across the reference accounts and score every verdict against the workbook's Answer Key tab. Needs live model access.
 - **View offline demo** — pre-computed reports from `demo_cache/`, for when there's no network or key.
 

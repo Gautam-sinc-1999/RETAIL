@@ -19,7 +19,7 @@ cp .env.example .env                               # fill in GROQ_API_KEY (or AN
 
 venv/Scripts/python scripts/prepare_dataset.py     # workbook -> data/meridian/*.csv (run first)
 venv/Scripts/streamlit run app.py                  # demo UI
-venv/Scripts/python -m pytest tests/ -v            # all 136 tests
+venv/Scripts/python -m pytest tests/ -v            # all 164 tests
 venv/Scripts/python -m pytest tests/test_agent.py::test_happy_path_one_drilldown_then_submit -v   # one test
 
 venv/Scripts/python scripts/validate_answer_key.py            # score the live agent vs the Answer Key
@@ -58,9 +58,21 @@ ingest → build_evidence_pack → investigate (LLM) → compute_impact → prio
 | 4 Investigation & attribution | [agent.py](src/pipeline/agent.py) | **the one LLM call** |
 | 5 Rupee impact | [impact.py](src/pipeline/impact.py) | deterministic |
 | 6 Prioritisation | [prioritize.py](src/pipeline/prioritize.py) | deterministic |
-| 7 Report assembly | [report.py](src/pipeline/report.py) | deterministic |
+| 7 Report assembly | [report.py](src/pipeline/report.py), [timeline.py](src/pipeline/timeline.py) | deterministic |
 
-[src/validation/answer_key.py](src/validation/answer_key.py) sits deliberately **outside** `src/pipeline/` — it scores finished reports against the workbook's Answer Key and must be unreachable from anything the agent touches.
+[src/validation/answer_key.py](src/validation/answer_key.py) sits deliberately **outside** `src/pipeline/` — it scores finished reports against the workbook's Answer Key and must be unreachable from anything the agent touches. [src/reporting/](src/reporting/) (the PDF export) sits outside for the same reason: it reads finished reports and renders them, and never computes an analytical figure.
+
+### The report carries its own evidence
+
+`assemble_report` attaches the full evidence pack plus `evidence_timeline` — a dated, ordered event log built by [timeline.py](src/pipeline/timeline.py). Each event carries a month, the fact, and a `reads_as` of `concern` / `reassuring` / `checked` / `context`. That last field is what makes the output an argument rather than a list: a report showing only the concerns is a prosecution, and on a NO FLAG account the `reassuring` and `checked` rows *are* the entire finding. Without this the report is a verdict with no path back to the facts.
+
+### `_presentation` — the report/prompt boundary
+
+`build_evidence_pack` emits a `_presentation` block (monthly discount and tier-share series, per-category monthly revenue, rep-change dates). [agent.py](src/pipeline/agent.py) `pack_for_prompt` strips every underscore-prefixed key before serializing the pack into the Stage 4 message.
+
+This exists so the report can be enriched without ever changing what the model reads. The prompt is tuned against all 18 reference accounts and the unit tests use scripted verdicts, so **growing the model's input is a regression the test suite cannot detect**. Put anything the report needs and the model does not behind that prefix; `tests/test_timeline.py::test_report_only_data_stays_out_of_the_prompt` fails if report-only data leaks into the prompt.
+
+Note that `analysis_dimensions["returns"]` is a *presence* flag (are there credit notes?), not a capability flag like the rest. `timeline.PRESENCE_ONLY_DIMENSIONS` excludes it from "could not be analysed" messaging — without that, a clean account is told a dimension was unmeasurable.
 
 ### Six detection dimensions, not one
 
@@ -129,6 +141,8 @@ Thin-input coverage comes from [tests/datasets.py](tests/datasets.py) instead: `
 - [test_evidence.py](tests/test_evidence.py) — the deterministic layer. One test per discriminating behaviour, plus a population check that the six FLAG accounts each trip a material signal and none of the eleven cleared accounts do.
 - [test_orchestrate.py](tests/test_orchestrate.py) — wiring and rupee math for every verdict shape, including the margin-only and diffuse-decline cases and the double-count guard.
 - [test_answer_key.py](tests/test_answer_key.py) — the scorecard logic: that a perfect run reaches 100% and "always flag" scores 6/18.
+- [test_timeline.py](tests/test_timeline.py) — the dated event log, and the `_presentation` boundary that keeps the prompt fixed.
+- [test_pdf_report.py](tests/test_pdf_report.py) — that every verdict shape renders at both depths, that model text containing markup cannot abort the export, and that a thin input narrows the document rather than breaking it. Depth difference is asserted in *pages*, not bytes: byte size only separated the two while charts were embedded.
 
 None of it measures model judgement; that is `scripts/validate_answer_key.py`, which needs a live key.
 
@@ -136,6 +150,8 @@ None of it measures model judgement; that is `scripts/validate_answer_key.py`, w
 
 [app.py](app.py) has three modes:
 
-- **Analyze a CSV** — the live pipeline. If Stage 4 fails it still shows the deterministic Stage 1–3 evidence rather than blanking the page.
+- **Analyze a CSV** — the live pipeline. If Stage 4 fails it still shows the deterministic Stage 1–3 evidence rather than blanking the page. The finished run is held in `st.session_state["live_run"]` and rendered *outside* the button block: every widget below it (the PDF depth picker, the download button) triggers a rerun, and an inline render would blank the page mid-demo. This mode offers the **PDF export** ([src/reporting/pdf.py](src/reporting/pdf.py)) at two depths — `brief` (~2 pages: verdict, money, timeline, actions) and `full` (adds per-dimension evidence with thresholds, ruled-out explanations, product attribution, and a provenance appendix carrying every monthly series).
+
+  The report is **tables only**. Charts were built, reviewed and deliberately dropped: the monthly-series appendix carries the same numbers in quotable form, and the export has no rendering dependency to fail on the demo machine.
 - **Answer Key validation** — runs the agent across the reference accounts and scores each verdict against the Answer Key, reporting accuracy split by expected outcome (FLAG / NO FLAG / DEFER). The split matters: one overall number can't distinguish a discriminating agent from one that flags everything. A failed run is recorded as a miss, never dropped from the denominator.
 - **View offline demo** — pre-computed reports from `demo_cache/`, the on-stage fallback for no network / no key / rate limit. Built with scripted verdicts, labelled as such in the UI, and **never** silently substituted for a failed live run; the user picks that mode explicitly.

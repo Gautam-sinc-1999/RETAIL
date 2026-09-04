@@ -324,6 +324,20 @@ SUBMIT_VERDICT_TOOL = {
 }
 
 
+def pack_for_prompt(evidence_pack: dict) -> dict:
+    """The evidence pack as the model sees it: every underscore-prefixed key
+    removed.
+
+    `build_evidence_pack` carries a `_presentation` block of chart series and
+    per-category monthly revenue for the PDF report. That data is far more
+    verbose than anything Stage 4 needs, and the prompt is tuned against all
+    18 reference accounts, so quietly growing the model's input is a
+    regression the scripted-client tests cannot detect. Stripping it here
+    makes the report and the prompt independently extensible.
+    """
+    return {k: v for k, v in evidence_pack.items() if not k.startswith("_")}
+
+
 class AgentError(Exception):
     """Raised when the agent loop fails to reach a submit_verdict call
     (max iterations exhausted, or the model stopped for an unexpected
@@ -356,7 +370,7 @@ def investigate(
     submit_verdict input dict. Raises AgentError if the model never
     submits a verdict within max_iterations."""
     tools = DRILLDOWN_TOOLS + [SUBMIT_VERDICT_TOOL]
-    messages = [{"role": "user", "content": json.dumps(evidence_pack)}]
+    messages = [{"role": "user", "content": json.dumps(pack_for_prompt(evidence_pack))}]
 
     for _ in range(max_iterations):
         response = client.messages.create(

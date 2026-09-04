@@ -28,12 +28,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 load_dotenv(REPO_ROOT / ".env")
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from pipeline.agent import DEFAULT_MODEL, AgentError
+from pipeline.agent import DEFAULT_MODEL, AgentError, pack_for_prompt
 from pipeline.evidence import build_evidence_pack
 from pipeline.ingest import IngestionError, account_sufficiency, ingest
 from pipeline.impact import compute_impact
 from pipeline.prioritize import prioritize
 from pipeline.report import assemble_report
+from pipeline.timeline import PRESENCE_ONLY_DIMENSIONS, READS_AS_ORDER
 from validation.answer_key import (
     AnswerKeyUnavailable,
     load_answer_key,
@@ -87,6 +88,95 @@ def run_agent_with_error_handling(client, df, account_id, evidence_pack, model, 
         return None, f"Unexpected error during investigation: {e}"
 
 
+@st.cache_data(show_spinner=False)
+def build_pdf_cached(report_json: str, depth: str) -> bytes:
+    """Render a report to PDF, memoised on (report, depth).
+
+    Keyed by the serialized report rather than the dict so Streamlit can
+    hash it, and so that re-rendering the page — which happens on every
+    widget interaction — does not rebuild the document each time.
+    """
+    from reporting.pdf import build_pdf
+
+    return build_pdf(json.loads(report_json), depth)
+
+
+PDF_DEPTH_LABELS = {
+    "Full dossier": "full",
+    "Executive brief": "brief",
+}
+
+
+def render_pdf_download(report: dict):
+    """Depth picker plus a download button for the PDF export."""
+    st.subheader("Download report")
+    col1, col2 = st.columns([2, 3])
+    label = col1.radio(
+        "Depth", list(PDF_DEPTH_LABELS), horizontal=False,
+        help=(
+            "Executive brief: the verdict, the money, the dated timeline and the actions "
+            "(~2 pages). Full dossier: adds per-dimension evidence with thresholds, the "
+            "alternative explanations that were ruled out, product-level attribution, and a "
+            "provenance appendix carrying every monthly series."
+        ),
+    )
+    depth = PDF_DEPTH_LABELS[label]
+
+    try:
+        with st.spinner("Building PDF..."):
+            from reporting.pdf import pdf_filename
+
+            pdf_bytes = build_pdf_cached(json.dumps(report), depth)
+    except Exception as e:
+        # The PDF is a convenience on top of a report the page has already
+        # rendered in full. A failure here must not blank the analysis.
+        st.warning(f"Could not build the PDF: {e}. The report above is unaffected.")
+        return
+
+    col2.download_button(
+        f"Download {label.lower()} (PDF)",
+        data=pdf_bytes,
+        file_name=pdf_filename(report, depth),
+        mime="application/pdf",
+        type="primary",
+    )
+    col2.caption(f"{len(pdf_bytes) / 1024:.0f} KB")
+
+
+def render_timeline(report: dict):
+    """The dated evidence log, as shown in the PDF."""
+    timeline = report.get("evidence_timeline") or []
+    if not timeline:
+        return
+
+    st.subheader("What changed, and when")
+    st.caption(
+        "Every row is a fact computed by the deterministic stages, dated to the month it was "
+        "observed and marked for how it bears on the verdict. \"Checked\" rows are innocent "
+        "explanations that were tested and did not account for what was found."
+    )
+
+    icons = {"concern": "🔴", "reassuring": "🟢", "checked": "🔍", "context": "⚪"}
+    counts = {kind: sum(1 for e in timeline if e["reads_as"] == kind) for kind in READS_AS_ORDER}
+    st.caption(" · ".join(
+        f"{icons[kind]} {counts[kind]} {kind}" for kind in READS_AS_ORDER if counts[kind]
+    ))
+
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "": icons.get(event["reads_as"], ""),
+                "When": event["when"],
+                "What happened": event["headline"],
+                "Detail": event["detail"],
+            }
+            for event in timeline
+        ]),
+        width="stretch",
+        hide_index=True,
+    )
+
+
 def render_verdict_badge(verdict: str, defer: bool):
     if defer or verdict == "insufficient_data":
         st.warning(f"**Verdict: {verdict.replace('_', ' ').title()}** — evidence was insufficient for a confident call.")
@@ -96,7 +186,7 @@ def render_verdict_badge(verdict: str, defer: bool):
         st.success(f"**Verdict: {verdict.replace('_', ' ').title()}**")
 
 
-def render_report(report: dict, cached: bool = False):
+def render_report(report: dict, cached: bool = False, allow_pdf: bool = False):
     if cached:
         st.info(
             f"Cached offline demo run ({report.get('_cache_metadata', {}).get('archetype', 'unknown')} archetype) — "
@@ -136,16 +226,21 @@ def render_report(report: dict, cached: bool = False):
         )
 
     # A dimension that could not be measured must never read as "measured and
-    # fine" — say plainly what this file did not let us look at.
+    # fine" — say plainly what this file did not let us look at. "returns" is
+    # excluded: it flags whether return lines are PRESENT, not whether they
+    # could be analysed, so an account with no credit notes was not a gap in
+    # coverage (see timeline.PRESENCE_ONLY_DIMENSIONS).
     unavailable = [
         name for name, available in (report.get("analysis_dimensions") or {}).items()
-        if not available
+        if not available and name not in PRESENCE_ONLY_DIMENSIONS
     ]
     if unavailable:
         st.caption(
             "Not analysed (columns absent from this file): "
             + ", ".join(n.replace("_", " ") for n in unavailable)
         )
+
+    render_timeline(report)
 
     st.subheader("Cited evidence")
     for fact in report["cited_evidence"]:
@@ -212,6 +307,9 @@ def render_report(report: dict, cached: bool = False):
 
     with st.expander("Data sufficiency"):
         st.json(report["data_sufficiency"])
+
+    if allow_pdf:
+        render_pdf_download(report)
 
 
 st.title("Revenue Leakage Investigator")
@@ -404,11 +502,14 @@ else:
             )
 
         if st.button("Run investigation", type="primary"):
+            # The result is stashed rather than rendered inline: every widget
+            # below it (the PDF depth picker, the download button itself)
+            # triggers a Streamlit rerun, at which point the button reads
+            # False and an inline render would blank the page mid-demo.
+            st.session_state.pop("live_run", None)
+
             with st.spinner("Running deterministic analysis (Stages 1-3)..."):
                 evidence_pack = build_evidence_pack(df, account_id)
-
-            with st.expander("Evidence pack (what the agent sees)"):
-                st.json(evidence_pack)
 
             with st.spinner(f"Running investigation agent (Stage 4, via {provider})..."):
                 try:
@@ -423,17 +524,30 @@ else:
 
                 verdict, error = run_agent_with_error_handling(client, df, account_id, evidence_pack, model, provider)
 
-            if error:
-                st.error(error)
+            run = {"account_id": account_id, "evidence_pack": evidence_pack, "error": error}
+            if not error:
+                impact = compute_impact(evidence_pack, verdict)
+                priority = prioritize(impact, verdict)
+                run["report"] = assemble_report(account_id, evidence_pack, verdict, impact, priority)
+            st.session_state["live_run"] = run
+
+        run = st.session_state.get("live_run")
+        # A stored run belongs to the account it was run for; switching the
+        # selectbox must not leave the previous account's verdict on screen.
+        if run and run["account_id"] == account_id:
+            with st.expander("Evidence pack (what the agent sees)"):
+                # Exactly what Stage 4 receives — the presentation-only keys
+                # the PDF uses are stripped, so this expander cannot drift
+                # from the real prompt payload.
+                st.json(pack_for_prompt(run["evidence_pack"]))
+
+            if run.get("error"):
+                st.error(run["error"])
                 st.info(
                     "Deterministic evidence (Stages 1-3) above is still valid and traceable — "
                     "only the LLM reasoning step failed. Retry, or use 'View offline demo' in the sidebar."
                 )
-                st.stop()
-
-            impact = compute_impact(evidence_pack, verdict)
-            priority = prioritize(impact, verdict)
-            report = assemble_report(account_id, evidence_pack, verdict, impact, priority)
-            render_report(report)
+            else:
+                render_report(run["report"], allow_pdf=True)
     else:
         st.write("Upload a CSV to begin, or switch to 'View offline demo' in the sidebar.")

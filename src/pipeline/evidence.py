@@ -19,7 +19,9 @@ from __future__ import annotations
 import pandas as pd
 
 from .baseline import build_baseline
+from .changepoint import full_month_index
 from .detect import (
+    _monthly_category_series,
     category_changes,
     data_gaps,
     dip_episodes,
@@ -41,6 +43,27 @@ def _monthly_revenue_series(monthly_series: dict) -> pd.Series:
     return pd.Series(
         {pd.Period(month, freq="M"): float(value) for month, value in monthly_series.items()}
     ).sort_index()
+
+
+def _manager_tenures(acc_df: pd.DataFrame) -> list[dict]:
+    """First month each account manager appears on this account's orders.
+
+    A mid-history rep change is reported by identity as a bare boolean, which
+    is enough to caveat a verdict but not enough to place the handover on a
+    timeline next to the change it is often wrongly blamed for. Dating it
+    lets the report say "rep changed in 2025-11, five months before the
+    decline" — still a correlation, but one the reader can now judge.
+    """
+    if "account_manager" not in acc_df.columns:
+        return []
+    d = acc_df[["date", "account_manager"]].dropna()
+    if d.empty:
+        return []
+    first_month = d.assign(month=d["date"].dt.to_period("M")).groupby("account_manager")["month"].min()
+    return [
+        {"account_manager": str(manager), "from_month": str(month)}
+        for manager, month in first_month.sort_values().items()
+    ]
 
 
 def build_evidence_pack(df: pd.DataFrame, account_id: str) -> dict:
@@ -101,4 +124,38 @@ def build_evidence_pack(df: pd.DataFrame, account_id: str) -> dict:
             "outlier_months": outlier_months(acc_df),
             "returns": returns_summary(acc_df),
         },
+        # Underscore-prefixed keys are for OUTPUT SURFACES ONLY (the PDF
+        # report's tables and timeline) and are stripped before the pack is
+        # serialized into the Stage 4 prompt — see agent.pack_for_prompt.
+        #
+        # The boundary exists so the report can be enriched without ever
+        # changing what the model reads. Stage 4's prompt is tuned against
+        # all 18 reference accounts and the unit tests use scripted verdicts,
+        # so they cannot catch a regression caused by feeding the model more
+        # text; keeping this channel out of the prompt makes that class of
+        # regression impossible rather than merely unlikely.
+        "_presentation": {
+            "discount_profile": baseline["discount_profile"],
+            "tier_mix_profile": baseline["tier_mix"],
+            "category_monthly_revenue": _category_monthly_revenue(acc_df),
+            "account_manager_tenures": _manager_tenures(acc_df),
+        },
+    }
+
+
+def _category_monthly_revenue(acc_df: pd.DataFrame) -> dict:
+    """Monthly revenue per category, full history.
+
+    Only ever reaches the report, never the model — which is why it can
+    afford to be this verbose. It dates a defection precisely ("stopped
+    after 2025-10") instead of leaving the reader to subtract
+    `consecutive_months_at_zero` from the end of history.
+    """
+    months = full_month_index(acc_df)
+    return {
+        str(category): {
+            str(month): round(float(value), 2)
+            for month, value in _monthly_category_series(acc_df, str(category), months).items()
+        }
+        for category in sorted(acc_df["category"].unique())
     }

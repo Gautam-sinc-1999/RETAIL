@@ -58,6 +58,392 @@
     "order_pattern": true,
     "returns": false
   },
+  "evidence_timeline": [
+    {
+      "month": "2026-04",
+      "when": "2026-04",
+      "headline": "History begins",
+      "detail": "4.4 months of history, 7 orders across 8 categories. Data sufficiency: insufficient (score 0.42).",
+      "dimension": "history",
+      "reads_as": "context"
+    },
+    {
+      "month": "2026-04",
+      "when": "2026-04",
+      "headline": "Limits on what this history can establish",
+      "detail": "Sufficiency flags: short history, few orders, cannot check prior year seasonality, history too short for baseline.",
+      "dimension": "history",
+      "reads_as": "concern"
+    },
+    {
+      "month": "2026-08",
+      "when": "2026-08",
+      "headline": "Revenue dip began, still ongoing (2026-08)",
+      "detail": "1 months below normal; trough Rs 154,724 against a typical month of Rs 213,011. This dip has not recovered.",
+      "dimension": "revenue",
+      "reads_as": "concern"
+    },
+    {
+      "month": null,
+      "when": "whole history",
+      "headline": "Revenue direction could not be established",
+      "detail": "History is not longer than the recent comparison window, so there is no baseline period to compare against.",
+      "dimension": "revenue",
+      "reads_as": "concern"
+    },
+    {
+      "month": null,
+      "when": "whole history",
+      "headline": "Seasonality could not be checked",
+      "detail": "Under 18 months of history, so there is no prior-year window to compare a recent dip against. A seasonal explanation can be neither confirmed nor ruled out.",
+      "dimension": "revenue",
+      "reads_as": "concern"
+    },
+    {
+      "month": null,
+      "when": "whole history",
+      "headline": "Margin could not be compared",
+      "detail": "No baseline window exists to compare the recent margin rate against.",
+      "dimension": "margin",
+      "reads_as": "concern"
+    },
+    {
+      "month": null,
+      "when": "whole history",
+      "headline": "Discount could not be compared",
+      "detail": "No baseline window exists to compare the recent discount level against.",
+      "dimension": "discount",
+      "reads_as": "concern"
+    },
+    {
+      "month": null,
+      "when": "whole history",
+      "headline": "Tier mix could not be compared",
+      "detail": "No baseline window exists to compare the recent tier mix against.",
+      "dimension": "tier_mix",
+      "reads_as": "concern"
+    }
+  ],
+  "evidence": {
+    "account_id": "ACC-109",
+    "account_name": "Quarry Lane Supply",
+    "region": "North",
+    "account_manager": "Priya Nair",
+    "data_sufficiency": {
+      "score": 0.42,
+      "label": "insufficient",
+      "flags": [
+        "short_history",
+        "few_orders",
+        "cannot_check_prior_year_seasonality",
+        "history_too_short_for_baseline"
+      ],
+      "history_months": 4.4,
+      "order_count": 7,
+      "category_count": 8
+    },
+    "analysis_dimensions": {
+      "revenue": true,
+      "margin": true,
+      "discount": true,
+      "tier_mix": true,
+      "category_mix": true,
+      "order_pattern": true,
+      "returns": false
+    },
+    "history": {
+      "start_date": "2026-04-05",
+      "end_date": "2026-08-18",
+      "months_of_history": 4.4,
+      "order_count": 7,
+      "category_count": 8
+    },
+    "overall_revenue": {
+      "baseline_monthly_median": 213011.14,
+      "recent_monthly_rate": null,
+      "pct_change": null,
+      "monthly_revenue_coefficient_of_variation": 0.1606,
+      "change_point": null,
+      "monthly_series": {
+        "2026-04": 222029.66,
+        "2026-05": 216813.82,
+        "2026-06": 213011.14,
+        "2026-07": 167403.37,
+        "2026-08": 154724.22
+      }
+    },
+    "revenue_trend": {
+      "direction": "unknown",
+      "slope_pct_per_month": null
+    },
+    "revenue_decline": {
+      "status": "insufficient_history",
+      "first_half_vs_second_half_pct_change": null,
+      "slope_pct_per_month": null,
+      "material_thresholds": {
+        "first_half_vs_second_half_pct_change": -0.15,
+        "slope_pct_per_month": -0.015,
+        "note": "both must be met for 'material_decline'"
+      }
+    },
+    "seasonality": {
+      "status": "insufficient_history",
+      "dip_months": [],
+      "echo_months": []
+    },
+    "dip_episodes": [
+      {
+        "start_month": "2026-08",
+        "end_month": "2026-08",
+        "months": 1,
+        "trough_revenue": 154724.22,
+        "typical_monthly_revenue": 213011.14,
+        "recovered": false,
+        "recovered_from_month": null,
+        "is_ongoing": true
+      }
+    ],
+    "margin": {
+      "status": "insufficient_history",
+      "margin_pct_change_pp": null
+    },
+    "margin_profile": {
+      "baseline_margin_pct": 0.2885,
+      "recent_margin_pct": null,
+      "margin_pct_change_pp": null,
+      "baseline_monthly_margin": 56201.84,
+      "recent_monthly_margin": null,
+      "monthly_margin_pct_series": {
+        "2026-04": 0.2835,
+        "2026-05": 0.286,
+        "2026-06": 0.2881,
+        "2026-07": 0.2915,
+        "2026-08": 0.2906
+      }
+    },
+    "discount": {
+      "status": "insufficient_history",
+      "discount_pct_change_pp": null
+    },
+    "tier_mix": {
+      "status": "insufficient_history",
+      "high_tier_share_change_pp": null
+    },
+    "category_mix": {
+      "baseline_share": {
+        "Cleaning & Maintenance": 0.0577,
+        "Consumables": 0.1217,
+        "Diagnostic Equipment": 0.1668,
+        "Electrical Accessories": 0.1144,
+        "Fasteners & Fittings": 0.1425,
+        "Power Tools": 0.1863,
+        "Precision Hardware": 0.1398,
+        "Safety Basics": 0.0708
+      },
+      "recent_share": {},
+      "high_value_categories": [
+        "Power Tools",
+        "Diagnostic Equipment",
+        "Fasteners & Fittings",
+        "Precision Hardware",
+        "Consumables"
+      ],
+      "low_value_categories": [
+        "Electrical Accessories",
+        "Safety Basics",
+        "Cleaning & Maintenance"
+      ],
+      "baseline_months": 5,
+      "recent_months": 0
+    },
+    "category_changes": [
+      {
+        "category": "Cleaning & Maintenance",
+        "is_high_value": false,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Consumables",
+        "is_high_value": true,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Diagnostic Equipment",
+        "is_high_value": true,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Electrical Accessories",
+        "is_high_value": false,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Fasteners & Fittings",
+        "is_high_value": true,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Power Tools",
+        "is_high_value": true,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Precision Hardware",
+        "is_high_value": true,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      },
+      {
+        "category": "Safety Basics",
+        "is_high_value": false,
+        "change_point_detected": false,
+        "defected": false,
+        "consecutive_months_at_zero": 0
+      }
+    ],
+    "product_changes": [],
+    "order_pattern": {
+      "status": "insufficient_history",
+      "order_frequency_pct_change": null,
+      "basket_width_pct_change": null,
+      "aov_pct_change": null,
+      "thresholds": {
+        "order_frequency_pct_change": 0.3,
+        "basket_width_pct_change": -0.2
+      }
+    },
+    "order_behavior": {
+      "order_frequency_baseline_per_month": 1.4,
+      "order_frequency_recent_per_month": null,
+      "order_frequency_pct_change": null,
+      "aov_baseline": 139140.32,
+      "aov_recent": null,
+      "aov_pct_change": null,
+      "basket_width_baseline": 5.71,
+      "basket_width_recent": null,
+      "basket_width_pct_change": null
+    },
+    "data_quality": {
+      "gaps": {
+        "months_in_history": 5,
+        "months_with_no_orders": [],
+        "note": null
+      },
+      "outlier_months": [],
+      "returns": {
+        "return_lines": 0,
+        "net_return_value": 0.0,
+        "share_of_gross_revenue": 0.0
+      }
+    },
+    "_presentation": {
+      "discount_profile": {
+        "baseline_avg_discount_pct": 0.0489,
+        "recent_avg_discount_pct": null,
+        "discount_pct_change_pp": null,
+        "monthly_avg_discount_series": {
+          "2026-04": 0.0575,
+          "2026-05": 0.0517,
+          "2026-06": 0.0432,
+          "2026-07": 0.0452,
+          "2026-08": 0.0439
+        }
+      },
+      "tier_mix_profile": {
+        "baseline_share_by_tier": {
+          "High": 0.4929,
+          "Mid": 0.2568,
+          "Low": 0.2503
+        },
+        "recent_share_by_tier": {},
+        "high_tier_share_change_pp": null,
+        "monthly_high_tier_share_series": {
+          "2026-04": 0.498,
+          "2026-05": 0.4968,
+          "2026-06": 0.4957,
+          "2026-07": 0.4964,
+          "2026-08": 0.4897
+        }
+      },
+      "category_monthly_revenue": {
+        "Cleaning & Maintenance": {
+          "2026-04": 12540.9,
+          "2026-05": 12257.5,
+          "2026-06": 12697.36,
+          "2026-07": 9463.9,
+          "2026-08": 9268.0
+        },
+        "Consumables": {
+          "2026-04": 27843.36,
+          "2026-05": 25289.88,
+          "2026-06": 25743.13,
+          "2026-07": 19669.83,
+          "2026-08": 20005.44
+        },
+        "Diagnostic Equipment": {
+          "2026-04": 35105.52,
+          "2026-05": 34001.1,
+          "2026-06": 37483.38,
+          "2026-07": 35824.7,
+          "2026-08": 20075.05
+        },
+        "Electrical Accessories": {
+          "2026-04": 26108.75,
+          "2026-05": 23014.86,
+          "2026-06": 24802.74,
+          "2026-07": 20304.92,
+          "2026-08": 17168.2
+        },
+        "Fasteners & Fittings": {
+          "2026-04": 31208.47,
+          "2026-05": 32611.06,
+          "2026-06": 29496.06,
+          "2026-07": 22150.7,
+          "2026-08": 23292.63
+        },
+        "Power Tools": {
+          "2026-04": 42162.96,
+          "2026-05": 41720.25,
+          "2026-06": 40129.2,
+          "2026-07": 26496.09,
+          "2026-08": 30907.5
+        },
+        "Precision Hardware": {
+          "2026-04": 33300.5,
+          "2026-05": 31706.52,
+          "2026-06": 27524.15,
+          "2026-07": 21557.43,
+          "2026-08": 22046.36
+        },
+        "Safety Basics": {
+          "2026-04": 13759.2,
+          "2026-05": 16212.65,
+          "2026-06": 15135.12,
+          "2026-07": 11935.8,
+          "2026-08": 11961.04
+        }
+      },
+      "account_manager_tenures": [
+        {
+          "account_manager": "Priya Nair",
+          "from_month": "2026-04"
+        }
+      ]
+    }
+  },
   "_cache_metadata": {
     "archetype": "acc109_defer_thin_history",
     "account_id": "ACC-109",
