@@ -64,7 +64,12 @@ ingest → build_evidence_pack → investigate (LLM) → compute_impact → prio
 
 ### The report carries its own evidence
 
-`assemble_report` attaches the full evidence pack plus `evidence_timeline` — a dated, ordered event log built by [timeline.py](src/pipeline/timeline.py). Each event carries a month, the fact, and a `reads_as` of `concern` / `reassuring` / `checked` / `context`. That last field is what makes the output an argument rather than a list: a report showing only the concerns is a prosecution, and on a NO FLAG account the `reassuring` and `checked` rows *are* the entire finding. Without this the report is a verdict with no path back to the facts.
+`assemble_report` attaches the full evidence pack plus `evidence_timeline` — a dated, ordered event log built by [timeline.py](src/pipeline/timeline.py). Each event carries a month, the fact, a `reads_as` of `concern` / `reassuring` / `checked` / `context`, a `method` (the threshold it was judged against), and `notable`. `reads_as` is what makes the output an argument rather than a list: a report showing only the concerns is a prosecution, and on a NO FLAG account the `reassuring` and `checked` rows *are* the entire finding.
+
+Two separations matter and are easy to collapse by accident:
+
+- **`detail` vs `method`.** `detail` is the business statement ("average discount 12.7% -> 23.5%"); `method` is how the call was made ("creep threshold: 3.0pp"). Mixing them buries a Rs 23k/month problem inside a sentence about percentage points. `tests/test_timeline.py` fails if a threshold leaks back into `detail`.
+- **`notable` vs `reads_as`.** `notable` means something *moved*, in either direction — it is not the same as "bad". A healthy account trading up has a finding worth reporting, and marking only concerns as notable would show a minor product stop while burying the premiumisation that explains the account. Every concern is notable; a reassuring event is notable only when it reports a change rather than the absence of one.
 
 ### `_presentation` — the report/prompt boundary
 
@@ -153,5 +158,7 @@ None of it measures model judgement; that is `scripts/validate_answer_key.py`, w
 - **Analyze a CSV** — the live pipeline. If Stage 4 fails it still shows the deterministic Stage 1–3 evidence rather than blanking the page. The finished run is held in `st.session_state["live_run"]` and rendered *outside* the button block: every widget below it (the PDF depth picker, the download button) triggers a rerun, and an inline render would blank the page mid-demo. This mode offers the **PDF export** ([src/reporting/pdf.py](src/reporting/pdf.py)) at two depths — `brief` (~2 pages: verdict, money, timeline, actions) and `full` (adds per-dimension evidence with thresholds, ruled-out explanations, product attribution, and a provenance appendix carrying every monthly series).
 
   The report is **tables only**. Charts were built, reviewed and deliberately dropped: the monthly-series appendix carries the same numbers in quotable form, and the export has no rendering dependency to fail on the demo machine.
+
+  The two depths are split by **audience, not length**. The brief is for the account owner: what moved, since when, how much, what to do. It carries only `notable` timeline events, and omits the agent's raw `cited_facts` (variable-name-level detail), the `method` line behind each call, the impact `basis` text, and the coverage section when nothing was actually limited. The full dossier is for a reviewer challenging the verdict and keeps all of it.
 - **Answer Key validation** — runs the agent across the reference accounts and scores each verdict against the Answer Key, reporting accuracy split by expected outcome (FLAG / NO FLAG / DEFER). The split matters: one overall number can't distinguish a discriminating agent from one that flags everything. A failed run is recorded as a miss, never dropped from the denominator.
 - **View offline demo** — pre-computed reports from `demo_cache/`, the on-stage fallback for no network / no key / rate limit. Built with scripted verdicts, labelled as such in the UI, and **never** silently substituted for a failed live run; the user picks that mode explicitly.

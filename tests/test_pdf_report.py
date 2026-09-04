@@ -8,8 +8,10 @@ cannot abort the export, that a thin file still produces a report, and that
 the export never invents a number the pipeline did not compute.
 """
 
+import base64
 import re
 import sys
+import zlib
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,58 @@ from pipeline.orchestrate import run_for_account
 from reporting.pdf import BRIEF, FULL, build_pdf, pdf_filename
 
 PDF_MAGIC = b"%PDF-"
+
+
+def pdf_text(pdf: bytes) -> str:
+    """Visible text of a PDF.
+
+    reportlab Flate-compresses page content streams, so the rendered words
+    are not present in the raw bytes — asserting against `pdf.decode()`
+    silently matches nothing and passes for the wrong reason. Decompress
+    each stream and pull the literals out of the text operators.
+    """
+    text = []
+    # The closing newline is optional: reportlab writes "...~>endstream".
+    for raw in re.findall(rb"stream\r?\n(.*?)(?:\r?\n)?endstream", pdf, re.S):
+        content = raw.strip()
+        # reportlab writes /Filter [ /ASCII85Decode /FlateDecode ], so both
+        # layers have to come off before any words are visible.
+        try:
+            if content.endswith(b"~>"):
+                content = base64.a85decode(content[:-2])
+            content = zlib.decompress(content)
+        except Exception:
+            continue
+        for literal in re.findall(rb"\((?:[^()\\]|\\.)*\)", content):
+            text.append(_unescape_pdf_literal(literal[1:-1]))
+    return b" ".join(text).decode("latin-1")
+
+
+# PDF string literals escape non-printables as octal (\177 is the notdef box
+# reportlab substitutes for an unencodable character). Without decoding
+# these, a search for "\x7f" finds nothing and a notdef test passes while
+# the document is visibly broken.
+_PDF_ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b",
+                b"f": b"\f", b"(": b"(", b")": b")", b"\\": b"\\"}
+
+
+def _unescape_pdf_literal(raw: bytes) -> bytes:
+    out = bytearray()
+    i = 0
+    while i < len(raw):
+        if raw[i:i + 1] != b"\\":
+            out += raw[i:i + 1]
+            i += 1
+            continue
+        nxt = raw[i + 1:i + 2]
+        octal = re.match(rb"[0-7]{1,3}", raw[i + 1:i + 4])
+        if octal:
+            out.append(int(octal.group(), 8) & 0xFF)
+            i += 1 + len(octal.group())
+        else:
+            out += _PDF_ESCAPES.get(nxt, nxt)
+            i += 2
+    return bytes(out)
 
 
 def page_count(pdf: bytes) -> int:
@@ -127,6 +181,77 @@ def test_markup_in_model_text_cannot_break_the_export(leak_report):
     hostile["attributed_categories"] = ["Tools & Hardware"]
     for depth in (BRIEF, FULL):
         assert build_pdf(hostile, depth).startswith(PDF_MAGIC)
+
+
+def test_brief_stays_to_the_business_facts(leak_report):
+    """The brief must not carry the agent's raw citations or the threshold
+    methodology — both are reviewer material, and both are what pushed the
+    earlier brief onto a second page."""
+    brief = pdf_text(build_pdf(leak_report, BRIEF))
+    full = pdf_text(build_pdf(leak_report, FULL))
+
+    for reviewer_only in ("Facts the verdict rests on", "How this was judged"):
+        assert reviewer_only not in brief, reviewer_only
+        assert reviewer_only in full, reviewer_only
+
+
+def test_brief_omits_a_coverage_section_when_nothing_is_limited(leak_report):
+    """"Data sufficiency: sufficient" is a line saying nothing was wrong.
+    It earns space only when something was."""
+    assert leak_report["data_sufficiency"]["label"] == "sufficient"
+    assert not leak_report["data_sufficiency"]["flags"]
+    assert "Coverage and limitations" not in pdf_text(build_pdf(leak_report, BRIEF))
+
+
+def test_brief_keeps_coverage_when_the_history_is_thin():
+    """The inverse: on the deferral account the limitation IS the finding."""
+    report = report_for(THIN_HISTORY, verdict="insufficient_data", confidence="low", defer=True,
+                        data_needed_if_deferring=["12 months of history"])
+    assert "Coverage and limitations" in pdf_text(build_pdf(report, BRIEF))
+
+
+def test_unicode_in_model_text_never_renders_as_a_notdef_box(leak_report):
+    """The built-in Helvetica encodes cp1252 only, and reportlab silently
+    substitutes a black box (0x7F) for anything outside it.
+
+    This is not hypothetical: a live ACC-109 report printed "Re<box>run"
+    because the model wrote a non-breaking hyphen. Characters with an ASCII
+    equivalent must be mapped, and anything left must be dropped rather than
+    boxed.
+    """
+    report = dict(leak_report)
+    report["narrative"] = "Re‑run the check – margin → 12%, discount ≥ 20%."
+    report["recommended_actions"] = ["Review high‑value lines ‘now’ — ₹5,000/mo"]
+    report["cited_evidence"] = ["Tier mix → down", "emoji \U0001f600 should vanish"]
+
+    for depth in (BRIEF, FULL):
+        pdf = build_pdf(report, depth)
+        # The tell is a font switch, not a character code: reportlab renders
+        # an unencodable glyph by falling back to ZapfDingbats, where the
+        # substituted letter draws as a filled square. A clean document never
+        # references that font. (Checking for \x7f does NOT work — that is
+        # also the code for the ordinary bullet, which renders correctly.)
+        assert b"ZapfDingbats" not in pdf, f"fallback font used in the {depth} report"
+        assert b"Symbol" not in pdf, f"fallback font used in the {depth} report"
+
+        squeezed = pdf_text(pdf).replace(" ", "")
+        assert "Re-runthecheck" in squeezed
+        assert "margin->12%" in squeezed
+        assert "discount>=20%" in squeezed
+        assert "Rs5,000/mo" in squeezed
+
+
+def test_the_no_baseline_dimensions_are_reported_once(leak_report):
+    """On a too-new account, margin/discount/tier mix each report the same
+    single cause. Three identical rows read as three findings."""
+    report = report_for(THIN_HISTORY, verdict="insufficient_data", confidence="low", defer=True,
+                        data_needed_if_deferring=["12 months of history"])
+    headlines = [e["headline"] for e in report["evidence_timeline"]]
+
+    merged = [h for h in headlines if "could not be compared" in h]
+    assert len(merged) == 1, headlines
+    for dimension in ("margin", "discount", "tier mix"):
+        assert dimension in merged[0].lower()
 
 
 def test_unknown_depth_is_rejected(leak_report):

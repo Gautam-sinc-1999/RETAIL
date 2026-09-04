@@ -64,64 +64,60 @@
       "when": "2026-04",
       "headline": "History begins",
       "detail": "4.4 months of history, 7 orders across 8 categories. Data sufficiency: insufficient (score 0.42).",
+      "method": null,
       "dimension": "history",
-      "reads_as": "context"
+      "reads_as": "context",
+      "notable": false
     },
     {
       "month": "2026-04",
       "when": "2026-04",
       "headline": "Limits on what this history can establish",
       "detail": "Sufficiency flags: short history, few orders, cannot check prior year seasonality, history too short for baseline.",
+      "method": null,
       "dimension": "history",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": "2026-08",
       "when": "2026-08",
       "headline": "Revenue dip began, still ongoing (2026-08)",
       "detail": "1 months below normal; trough Rs 154,724 against a typical month of Rs 213,011. This dip has not recovered.",
+      "method": null,
       "dimension": "revenue",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": null,
       "when": "whole history",
       "headline": "Revenue direction could not be established",
       "detail": "History is not longer than the recent comparison window, so there is no baseline period to compare against.",
+      "method": null,
       "dimension": "revenue",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": null,
       "when": "whole history",
       "headline": "Seasonality could not be checked",
       "detail": "Under 18 months of history, so there is no prior-year window to compare a recent dip against. A seasonal explanation can be neither confirmed nor ruled out.",
+      "method": null,
       "dimension": "revenue",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": null,
       "when": "whole history",
-      "headline": "Margin could not be compared",
-      "detail": "No baseline window exists to compare the recent margin rate against.",
-      "dimension": "margin",
-      "reads_as": "concern"
-    },
-    {
-      "month": null,
-      "when": "whole history",
-      "headline": "Discount could not be compared",
-      "detail": "No baseline window exists to compare the recent discount level against.",
-      "dimension": "discount",
-      "reads_as": "concern"
-    },
-    {
-      "month": null,
-      "when": "whole history",
-      "headline": "Tier mix could not be compared",
-      "detail": "No baseline window exists to compare the recent tier mix against.",
-      "dimension": "tier_mix",
-      "reads_as": "concern"
+      "headline": "Margin, discount and tier mix could not be compared",
+      "detail": "No baseline window exists on this account, so none of these dimensions can be measured against a prior period. This is a limit of the history available, not a finding that they are unchanged.",
+      "method": null,
+      "dimension": "coverage",
+      "reads_as": "concern",
+      "notable": true
     }
   ],
   "evidence": {

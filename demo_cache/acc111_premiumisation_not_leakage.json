@@ -55,64 +55,80 @@
       "when": "2024-09",
       "headline": "History begins",
       "detail": "22.5 months of history, 30 orders across 8 categories. Data sufficiency: sufficient (score 1.0).",
+      "method": null,
       "dimension": "history",
-      "reads_as": "context"
+      "reads_as": "context",
+      "notable": false
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Revenue is growing",
-      "detail": "First half vs second half 8.2%, trend 0.65%/month. Material decline requires both <= -15.0% and <= -1.50%/month.",
+      "detail": "First half vs second half 8.2%, trend 0.65%/month.",
+      "method": "Material decline requires both <= -15.0% half-over-half and <= -1.50%/month trend.",
       "dimension": "revenue",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": true
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Margin rate is stable",
-      "detail": "Margin rate 29.7% -> 32.3% (+2.6pp, against a 3.0pp threshold).",
+      "detail": "Margin rate 29.7% -> 32.3% (+2.6pp).",
+      "method": "Erosion threshold: 3.0pp between the baseline and recent windows.",
       "dimension": "margin",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": false
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Discounting is stable",
-      "detail": "Average discount 4.9% -> 5.4% (+0.5pp, against a 3.0pp threshold).",
+      "detail": "Average discount 4.9% -> 5.4% (+0.5pp).",
+      "method": "Creep threshold: 3.0pp. Discount is revenue-weighted, so a deep discount on a large line counts for more than the same discount on a small one.",
       "dimension": "discount",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": false
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Product mix moves upmarket",
-      "detail": "High-tier share of revenue 52.8% -> 64.6% (+11.7pp, against a 8.0pp threshold). Low tier 21.9% -> 12.8%. Value is moving INTO the high tier \u2014 this is premiumisation, the opposite of a downgrade, and is good news.",
+      "detail": "High-tier share of revenue 52.8% -> 64.6% (+11.7pp). Low tier 21.9% -> 12.8%. Value is moving INTO the high tier \u2014 this is premiumisation, the opposite of a downgrade, and is good news.",
+      "method": "Shift threshold: 8.0pp. Direction decides the verdict \u2014 the same size of move upward is premiumisation, not a downgrade.",
       "dimension": "tier_mix",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": true
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "1 product(s) stopped being bought",
       "detail": "CN-Cutting Blade 10pk (Consumables, was Rs 6,799/month)",
+      "method": null,
       "dimension": "category_mix",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Ordering behaviour is unchanged",
       "detail": "Orders per month 1.28 -> 1.17 (-8.6%); lines per order 6.26 -> 6.86 (9.6%); average order value 19.3%.",
+      "method": null,
       "dimension": "order_pattern",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": false
     },
     {
       "month": null,
       "when": "whole history",
       "headline": "Seasonality checked: no recent dip to explain",
       "detail": "No month in the last year fell far enough below normal to need explaining.",
+      "method": null,
       "dimension": "revenue",
-      "reads_as": "checked"
+      "reads_as": "checked",
+      "notable": false
     }
   ],
   "evidence": {

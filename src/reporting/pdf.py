@@ -124,14 +124,49 @@ def _styles() -> dict:
 # --- formatting helpers ----------------------------------------------------
 
 
+# The built-in Helvetica can only encode WinAnsi (cp1252). Anything outside
+# it renders as a black notdef box — reportlab does not warn. Model output
+# routinely contains characters that are NOT in cp1252 even though they look
+# ordinary: the non-breaking hyphen below is what turned "Re-run" into
+# "Re<box>run" in a live report. Map the ones with obvious ASCII equivalents
+# rather than dropping them, so "->" survives as an arrow and not as a hole.
+UNICODE_FALLBACKS = {
+    "‐": "-", "‑": "-", "‒": "-", "―": "-",  # hyphens/dashes
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",  # single quotes
+    "“": '"', "”": '"', "„": '"',                 # double quotes
+    "•": "-", "‣": "-", "▪": "-",                 # bullets
+    "→": "->", "←": "<-", "↔": "<->",             # arrows
+    "≤": "<=", "≥": ">=", "≠": "!=",              # comparisons
+    "₹": "Rs", " ": " ", "​": "",                 # rupee, spaces
+    "′": "'", "″": '"', "⁄": "/",
+}
+
+
+def _ascii_safe(text: str) -> str:
+    """Make text renderable by a standard PDF font.
+
+    Known characters are mapped to their ASCII equivalent; anything still
+    outside cp1252 is dropped rather than printed as a box, because a
+    missing character reads as a typo and a black box reads as a broken
+    document.
+    """
+    for source, replacement in UNICODE_FALLBACKS.items():
+        if source in text:
+            text = text.replace(source, replacement)
+    if text.isascii():
+        return text
+    return text.encode("cp1252", errors="ignore").decode("cp1252")
+
+
 def _text(value) -> str:
-    """Escape anything that reaches a Paragraph.
+    """Escape and sanitize anything that reaches a Paragraph.
 
     Narrative text, cited facts and category names all originate outside
     this module — a stray '&' or '<' in any of them would otherwise abort
-    the export with a parse error at the worst possible moment.
+    the export with a parse error at the worst possible moment, and a stray
+    Unicode dash would silently print as a black box.
     """
-    return escape("" if value is None else str(value))
+    return escape(_ascii_safe("" if value is None else str(value)))
 
 
 def _rupees(value) -> str:
@@ -343,7 +378,7 @@ def _verdict_block(report: dict, styles: dict) -> list:
     return flow
 
 
-def _impact_section(report: dict, styles: dict) -> list:
+def _impact_section(report: dict, styles: dict, depth: str = FULL) -> list:
     impact = report.get("financial_impact") or {}
     priority = report.get("prioritization") or {}
     margin = impact.get("margin_impact")
@@ -382,9 +417,13 @@ def _impact_section(report: dict, styles: dict) -> list:
                       _rupees(projection["projected_12_month_margin_loss_if_unaddressed"])))
     if tiles:
         flow += [_key_value_panel(tiles, styles, columns=min(len(tiles), 4)), Spacer(1, 5)]
-        flow.append(Paragraph(
-            "Revenue at risk and margin at risk overlap - margin is a slice of revenue - and are "
-            "never added together. Severity is the worse of the two ratios.", styles["muted"]))
+        # Only worth saying when both figures are actually on the page; on a
+        # margin-only leak it warns against an addition nobody could make.
+        if revenue_at_risk and margin:
+            flow.append(Paragraph(
+                "Revenue at risk and margin at risk overlap - margin is a slice of revenue - and "
+                "are never added together. Severity is the worse of the two ratios.",
+                styles["muted"]))
 
     if per_category:
         flow += [Spacer(1, 8), Paragraph("By category", styles["h2"])]
@@ -412,14 +451,16 @@ def _impact_section(report: dict, styles: dict) -> list:
             f"<b>Whole-account decline:</b> {_rupees(account_level['baseline_monthly_revenue'])}"
             f"/month to {_rupees(account_level['recent_monthly_revenue'])}/month.",
             styles["body"])]
-        flow.append(Paragraph(_text(account_level.get("basis")), styles["muted"]))
+        if depth == FULL:
+            flow.append(Paragraph(_text(account_level.get("basis")), styles["muted"]))
 
     if margin:
         flow += [Spacer(1, 7), Paragraph(
             f"<b>Margin rate:</b> {_pct(margin['baseline_margin_pct'])} to "
             f"{_pct(margin['recent_margin_pct'])} ({_pp(margin.get('margin_pct_erosion_pp'))}).",
             styles["body"])]
-        flow.append(Paragraph(_text(margin.get("basis")), styles["muted"]))
+        if depth == FULL:
+            flow.append(Paragraph(_text(margin.get("basis")), styles["muted"]))
 
     if priority.get("reason"):
         flow += [Spacer(1, 7),
@@ -428,21 +469,41 @@ def _impact_section(report: dict, styles: dict) -> list:
     return flow
 
 
-def _timeline_section(report: dict, styles: dict, only: set[str] | None = None) -> list:
+def _timeline_section(report: dict, styles: dict, depth: str = FULL) -> list:
+    """The dated evidence log.
+
+    In the brief this is the findings only, with everything that was checked
+    and found normal compressed into a single line underneath. A commercial
+    reader needs "what is wrong, since when, and how much"; four rows of
+    threshold arithmetic confirming that nothing else moved buries that.
+    The full dossier keeps every row and every threshold.
+    """
     timeline = report.get("evidence_timeline") or []
-    if only:
-        timeline = [e for e in timeline if e["reads_as"] in only]
     if not timeline:
         return []
 
+    if depth == BRIEF:
+        # Anything that MOVED, in either direction — an account trading up is
+        # a finding too. Only the rows reporting that nothing changed get
+        # folded into the summary line.
+        shown = [e for e in timeline if e.get("notable")]
+        cleared = [e for e in timeline
+                   if not e.get("notable") and e["reads_as"] in ("reassuring", "checked")]
+    else:
+        shown, cleared = timeline, []
+
     rows = []
-    for event in timeline:
+    for event in shown:
         color = STATUS_COLORS.get(event["reads_as"], MUTED)
+        detail = _text(event["detail"])
+        if depth == FULL and event.get("method"):
+            detail += (f'<br/><font color="{INK_MUTED}">How this was judged: '
+                       f'{_text(event["method"])}</font>')
         rows.append([
             Paragraph(f'<font size="7.4">{_text(event["when"])}</font>', styles["cell_small"]),
             Paragraph(
                 f'<b>{_text(event["headline"])}</b><br/>'
-                f'<font size="7.4" color="{INK_SECONDARY}">{_text(event["detail"])}</font>',
+                f'<font size="7.4" color="{INK_SECONDARY}">{detail}</font>',
                 styles["cell"]),
             Paragraph(
                 f'<font color="{_hex(color)}" size="7.4"><b>'
@@ -450,20 +511,42 @@ def _timeline_section(report: dict, styles: dict, only: set[str] | None = None) 
                 styles["cell_small"]),
         ])
 
-    return [
+    if depth == BRIEF:
+        intro = ("What moved on this account, dated to the month it started. Everything else was "
+                 "checked and found normal.")
+    else:
+        intro = ("Every row is a fact computed by the deterministic stages, dated to the month it "
+                 "was observed and marked for how it bears on the verdict. &#8220;Checked&#8221; "
+                 "rows are innocent explanations that were tested and did not account for what "
+                 "was found.")
+
+    flow = [
         Paragraph("What changed, and when", styles["h1"]),
-        Paragraph(
-            "Every row is a fact computed by the deterministic stages, dated to the month it was "
-            "observed and marked for how it bears on the verdict. &#8220;Checked&#8221; rows are "
-            "innocent explanations that were tested and did not account for what was found.",
-            styles["small"]),
+        Paragraph(intro, styles["small"]),
         Spacer(1, 7),
-        _data_table(
+    ]
+    if rows:
+        flow.append(_data_table(
             ["When", "What happened", "Reads as"],
             rows,
             [CONTENT_WIDTH * w for w in (0.16, 0.70, 0.14)],
-        ),
-    ]
+        ))
+    else:
+        flow.append(Paragraph("Nothing on this account moved outside its normal range.",
+                              styles["body"]))
+
+    if cleared:
+        # Named, not just counted: "we checked seasonality" is the answer to
+        # the first question a sceptical reader asks, and it costs one line.
+        flow += [
+            Spacer(1, 7),
+            Paragraph(
+                "<b>Also checked and found normal:</b> "
+                + _text("; ".join(e["headline"] for e in cleared))
+                + ". Full detail and the thresholds behind every call are in the full report.",
+                styles["small"]),
+        ]
+    return flow
 
 
 def _dimension_rows(report: dict) -> list[tuple]:
@@ -636,14 +719,14 @@ def _defer_section(report: dict, styles: dict) -> list:
     if not report.get("defer") and report.get("verdict") != "insufficient_data":
         return []
     needed = report.get("data_needed_if_deferring") or []
-    flow = [
+    flow = _headed(
         Paragraph("Why this was not called", styles["h1"]),
-        Paragraph(
+        [Paragraph(
             "This account was deferred to a human rather than classified. Deferring is a designed "
             "outcome, not a failure: where the history cannot separate a temporary dip from a "
             "structural loss, a confident verdict would be a guess presented as a finding.",
-            styles["body"]),
-    ]
+            styles["body"])],
+    )
     if needed:
         flow += [Spacer(1, 6), Paragraph("What would resolve it", styles["h2"])]
         flow += _bullets(needed, styles)
@@ -673,30 +756,38 @@ def _cited_section(report: dict, styles: dict) -> list:
         ] + _bullets(facts, styles))
 
 
-def _coverage_section(report: dict, styles: dict) -> list:
+def _coverage_section(report: dict, styles: dict, depth: str = FULL) -> list:
     dimensions = report.get("analysis_dimensions") or {}
     unavailable = [n for n, available in dimensions.items()
                    if not available and n not in PRESENCE_ONLY_DIMENSIONS]
     sufficiency = report.get("data_sufficiency") or {}
+    flags = sufficiency.get("flags") or []
 
-    flow = [Paragraph("Coverage and limitations", styles["h1"])]
-    flow.append(Paragraph(
+    # In the brief this section earns its place only when there IS a
+    # limitation. "Data sufficiency: sufficient" is a line saying nothing was
+    # wrong with the data, which is not news; an unmeasured dimension or a
+    # thin history very much is.
+    if depth == BRIEF and not unavailable and not flags and sufficiency.get("label") == "sufficient":
+        return []
+
+    body = []
+    body.append(Paragraph(
         f"Data sufficiency: <b>{_text(sufficiency.get('label'))}</b> "
         f"(score {sufficiency.get('score')}) - {sufficiency.get('history_months')} months, "
         f"{sufficiency.get('order_count')} orders, {sufficiency.get('category_count')} categories.",
         styles["body"]))
-    if sufficiency.get("flags"):
-        flow.append(Paragraph(
-            "Flags: " + _text(", ".join(f.replace("_", " ") for f in sufficiency["flags"])) + ".",
+    if flags:
+        body.append(Paragraph(
+            "Flags: " + _text(", ".join(f.replace("_", " ") for f in flags)) + ".",
             styles["body"]))
     if unavailable:
-        flow.append(Spacer(1, 4))
-        flow.append(Paragraph(
+        body.append(Spacer(1, 4))
+        body.append(Paragraph(
             "<b>Not analysed</b> (absent from this file): "
             + _text(", ".join(n.replace("_", " ") for n in unavailable))
             + ". These dimensions were not measured. That is not a finding that they are healthy.",
             styles["body"]))
-    return flow
+    return _headed(Paragraph("Coverage and limitations", styles["h1"]), body)
 
 
 def _provenance_section(report: dict, styles: dict) -> list:
@@ -805,9 +896,9 @@ def build_pdf(report: dict, depth: str = FULL) -> bytes:
     flow += _verdict_block(report, styles)
     flow.append(Spacer(1, 4))
     flow += _defer_section(report, styles)
-    flow += _impact_section(report, styles)
+    flow += _impact_section(report, styles, depth)
     flow.append(_rule())
-    flow += _timeline_section(report, styles)
+    flow += _timeline_section(report, styles, depth)
 
     if depth == FULL:
         flow.append(PageBreak())
@@ -815,9 +906,14 @@ def build_pdf(report: dict, depth: str = FULL) -> bytes:
         flow += _ruled_out_section(report, styles)
         flow += _attribution_section(report, styles)
 
-    flow += _cited_section(report, styles)
+    if depth == FULL:
+        # The agent's own citations are variable-name-level detail ("
+        # margin_pct_change_pp -11.08, exceeds threshold 3pp"). They are the
+        # reasoning trail a reviewer wants and noise to an account owner, who
+        # has the same facts in English in the timeline above.
+        flow += _cited_section(report, styles)
     flow += _actions_section(report, styles)
-    flow += _coverage_section(report, styles)
+    flow += _coverage_section(report, styles, depth)
 
     if depth == FULL:
         flow += _provenance_section(report, styles)

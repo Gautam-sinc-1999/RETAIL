@@ -124,10 +124,11 @@ def test_thin_history_reports_what_it_could_not_establish(df):
     timeline = build_timeline(pack_for(df, THIN_HISTORY))
     text = " ".join(headlines(timeline)).lower()
 
-    for expected in ("margin could not be compared",
-                     "discount could not be compared",
-                     "tier mix could not be compared",
-                     "seasonality could not be checked"):
+    # Margin, discount and tier mix share one cause (no baseline window) and
+    # are reported in a single merged row rather than three identical ones.
+    for expected in ("margin, discount and tier mix could not be compared",
+                     "seasonality could not be checked",
+                     "revenue direction could not be established"):
         assert expected in text, headlines(timeline)
 
     limits = find(timeline, "limits on what this history can establish")
@@ -185,6 +186,43 @@ def test_absent_returns_are_not_reported_as_missing_coverage(df):
     timeline = build_timeline(pack_for(df, FLAGSHIP_LEAK))
     coverage = find(timeline, "could not be analysed")
     assert not coverage, [e["detail"] for e in coverage]
+
+
+def test_thresholds_live_in_method_not_in_the_business_detail(df):
+    """`detail` is what an account owner reads. Threshold arithmetic belongs
+    in `method`, which only the full dossier prints — a Rs 23k/month problem
+    should not be phrased as a sentence about percentage points."""
+    for account_id in sorted(df["account_id"].unique()):
+        for event in build_timeline(pack_for(df, account_id)):
+            assert "threshold" not in (event["detail"] or "").lower(), event
+            assert "requires both" not in (event["detail"] or "").lower(), event
+
+
+def test_a_leaking_account_has_thresholds_available_for_review(df):
+    """Dropping the thresholds from `detail` must not lose them — the full
+    report still has to be able to defend every call."""
+    timeline = build_timeline(pack_for(df, "ACC-107"))
+    methods = " ".join(e["method"] or "" for e in timeline).lower()
+    assert "threshold" in methods
+    assert any("creep threshold" in (e["method"] or "").lower() for e in timeline)
+
+
+def test_notable_marks_movement_not_badness(df):
+    """A healthy account that is trading up has a finding worth reporting.
+    If only concerns were notable, the brief would show a minor product stop
+    and bury the premiumisation that explains the whole account."""
+    timeline = build_timeline(pack_for(df, "ACC-111"))
+    notable = {e["headline"] for e in timeline if e["notable"]}
+    assert any("moves upmarket" in h for h in notable), notable
+
+    # "Nothing changed" rows stay out of the shortlist.
+    quiet = {e["headline"] for e in timeline if not e["notable"]}
+    assert any("is stable" in h or "unchanged" in h for h in quiet), quiet
+
+    # Every concern is notable by definition.
+    for event in timeline:
+        if event["reads_as"] == "concern":
+            assert event["notable"], event
 
 
 def test_every_event_is_well_formed(df):

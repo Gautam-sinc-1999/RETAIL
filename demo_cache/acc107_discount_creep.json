@@ -78,64 +78,80 @@
       "when": "2024-09",
       "headline": "History begins",
       "detail": "22.9 months of history, 36 orders across 8 categories. Data sufficiency: sufficient (score 1.0).",
+      "method": null,
       "dimension": "history",
-      "reads_as": "context"
+      "reads_as": "context",
+      "notable": false
     },
     {
       "month": "2025-10",
       "when": "2025-10",
       "headline": "Discount creeps upward",
-      "detail": "Average discount 12.7% -> 23.5% (+10.8pp, against a 3.0pp threshold). The same goods are being sold at a steadily deeper discount. Discount first rose above its baseline band in 2025-10 and stayed there.",
+      "detail": "Average discount 12.7% -> 23.5% (+10.8pp). The same goods are being sold at a steadily deeper discount. It first rose above its normal range in 2025-10 and has stayed there since.",
+      "method": "Creep threshold: 3.0pp. Discount is revenue-weighted, so a deep discount on a large line counts for more than the same discount on a small one.",
       "dimension": "discount",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": "2025-11",
       "when": "2025-11",
       "headline": "Margin rate erodes",
-      "detail": "Margin rate 22.6% -> 11.5% (-11.1pp, against a 3.0pp threshold). 10 months sat below the baseline band. It first fell below that band in 2025-11 and stayed there.",
+      "detail": "Margin rate 22.6% -> 11.5% (-11.1pp). 10 months sat below the normal range. It first fell below in 2025-11 and has stayed there since.",
+      "method": "Erosion threshold: 3.0pp between the baseline and recent windows.",
       "dimension": "margin",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Revenue is stable",
-      "detail": "First half vs second half -0.9%, trend -0.16%/month. Material decline requires both <= -15.0% and <= -1.50%/month. A stable topline does not by itself mean a healthy account \u2014 the margin, discount and mix rows below are what test that.",
+      "detail": "First half vs second half -0.9%, trend -0.16%/month. A stable topline does not by itself mean a healthy account \u2014 the margin, discount and mix rows are what test that.",
+      "method": "Material decline requires both <= -15.0% half-over-half and <= -1.50%/month trend.",
       "dimension": "revenue",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": false
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Product mix is stable",
-      "detail": "High-tier share of revenue 49.6% -> 48.8% (-0.8pp, against a 8.0pp threshold). Low tier 24.7% -> 24.9%.",
+      "detail": "High-tier share of revenue 49.6% -> 48.8% (-0.8pp). Low tier 24.7% -> 24.9%.",
+      "method": "Shift threshold: 8.0pp. Direction decides the verdict \u2014 the same size of move upward is premiumisation, not a downgrade.",
       "dimension": "tier_mix",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": false
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "2 product(s) stopped being bought",
       "detail": "PH-Precision Torque Wrench (Precision Hardware, was Rs 14,691/month); CN-Drill Bit Set (Consumables, was Rs 7,032/month)",
+      "method": null,
       "dimension": "category_mix",
-      "reads_as": "concern"
+      "reads_as": "concern",
+      "notable": true
     },
     {
       "month": "2026-03",
       "when": "2026-03 - 2026-08",
       "headline": "Ordering behaviour is unchanged",
       "detail": "Orders per month 1.44 -> 1.67 (16.0%); lines per order 5.54 -> 4.8 (-13.4%); average order value -15.9%.",
+      "method": null,
       "dimension": "order_pattern",
-      "reads_as": "reassuring"
+      "reads_as": "reassuring",
+      "notable": false
     },
     {
       "month": null,
       "when": "whole history",
       "headline": "Seasonality checked: no recent dip to explain",
       "detail": "No month in the last year fell far enough below normal to need explaining.",
+      "method": null,
       "dimension": "revenue",
-      "reads_as": "checked"
+      "reads_as": "checked",
+      "notable": false
     }
   ],
   "evidence": {

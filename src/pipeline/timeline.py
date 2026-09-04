@@ -38,14 +38,34 @@ CONTEXT = "context"
 READS_AS_ORDER = [CONCERN, REASSURING, CHECKED, CONTEXT]
 
 
-def _event(month, headline, detail, dimension, reads_as, when=None) -> dict:
+def _event(month, headline, detail, dimension, reads_as, when=None, method=None,
+           notable=None) -> dict:
+    """One dated fact.
+
+    `detail` is the business statement — what moved, by how much, and what it
+    means for the account. `method` is how the call was made (the threshold
+    it was judged against, the rule that classified it). They are separate
+    fields because they serve different readers: an account owner acting on
+    the finding needs the first, and a reviewer challenging it needs the
+    second. Collapsing them buries a Rs 23k/month problem inside a sentence
+    about percentage-point thresholds.
+    """
     return {
         "month": month,
         "when": when or (month if month else "whole history"),
         "headline": headline,
         "detail": detail,
+        "method": method,
         "dimension": dimension,
         "reads_as": reads_as,
+        # Did something actually MOVE on this account? Distinct from whether
+        # the movement is bad. A short report shows what moved in either
+        # direction — an account trading up is a finding, and burying it with
+        # the "nothing changed" rows loses the one thing worth telling the
+        # account owner. Every concern is notable by definition; a reassuring
+        # event is notable only when it reports a change rather than the
+        # absence of one.
+        "notable": bool(reads_as == CONCERN if notable is None else notable),
     }
 
 
@@ -183,26 +203,27 @@ def _revenue_events(pack: dict) -> list[dict]:
     status = decline.get("status")
     halves = decline.get("first_half_vs_second_half_pct_change")
     slope = decline.get("slope_pct_per_month")
-    shared = (
-        f"First half vs second half {_pct(halves)}, trend {_pct(slope, 2)}/month. "
-        f"Material decline requires both <= {_pct(-0.15)} and <= {_pct(-0.015, 2)}/month."
-    )
+    shared = f"First half vs second half {_pct(halves)}, trend {_pct(slope, 2)}/month."
+    how = (f"Material decline requires both <= {_pct(-0.15)} half-over-half and "
+           f"<= {_pct(-0.015, 2)}/month trend.")
+
     if status == "material_decline":
         events.append(_event(window_start, "Revenue is in material decline", shared,
-                             "revenue", CONCERN, when=window_label))
+                             "revenue", CONCERN, when=window_label, method=how))
     elif status == "mild_drift":
         events.append(_event(window_start, "Revenue drifting within its normal band",
                              shared + " This is drift, not a material decline.",
-                             "revenue", CONTEXT, when=window_label))
+                             "revenue", CONTEXT, when=window_label, method=how))
     elif status == "growth":
         events.append(_event(window_start, "Revenue is growing", shared,
-                             "revenue", REASSURING, when=window_label))
+                             "revenue", REASSURING, when=window_label, method=how,
+                             notable=True))
     elif status == "stable":
         events.append(_event(
             window_start, "Revenue is stable",
             shared + " A stable topline does not by itself mean a healthy account — "
-            "the margin, discount and mix rows below are what test that.",
-            "revenue", REASSURING, when=window_label,
+            "the margin, discount and mix rows are what test that.",
+            "revenue", REASSURING, when=window_label, method=how,
         ))
 
     cv = overall.get("monthly_revenue_coefficient_of_variation")
@@ -247,7 +268,7 @@ def _dip_and_season_events(pack: dict) -> list[dict]:
                 f"{episode['months']} months below normal; trough "
                 f"{_rupees(episode['trough_revenue'])}. Recovered from "
                 f"{episode.get('recovered_from_month')}. A resolved incident, not a live problem.",
-                "revenue", REASSURING,
+                "revenue", REASSURING, notable=True,
             ))
 
     seasonality = pack.get("seasonality") or {}
@@ -261,7 +282,7 @@ def _dip_and_season_events(pack: dict) -> list[dict]:
             f"Dipped in {', '.join(dip_months)}; the same calendar months a year earlier "
             f"({', '.join(echo_months)}) were also below normal. Strong evidence the dip is "
             "seasonal rather than structural.",
-            "revenue", REASSURING,
+            "revenue", REASSURING, notable=True,
         ))
     elif status == "not_present" and dip_months:
         events.append(_event(
@@ -310,20 +331,22 @@ def _margin_events(pack: dict) -> list[dict]:
 
     summary = (
         f"Margin rate {_pct(baseline_pct)} -> {_pct(margin.get('recent_margin_pct'))} "
-        f"({_pp(change_pp)}, against a {threshold}pp threshold)."
+        f"({_pp(change_pp)})."
     )
+    how = f"Erosion threshold: {threshold}pp between the baseline and recent windows."
+
     if status == "erosion_detected":
-        detail = summary + f" {margin.get('months_below_baseline_margin')} months sat below the baseline band."
+        detail = summary + f" {margin.get('months_below_baseline_margin')} months sat below the normal range."
         if crossed:
-            detail += f" It first fell below that band in {crossed} and stayed there."
+            detail += f" It first fell below in {crossed} and has stayed there since."
         return [_event(crossed or window_start, "Margin rate erodes", detail,
-                       "margin", CONCERN, when=crossed or window_label)]
+                       "margin", CONCERN, when=crossed or window_label, method=how)]
     if status == "improvement_detected":
         return [_event(window_start, "Margin rate improves",
                        summary + " Rising margin is the opposite of a leak.",
-                       "margin", REASSURING, when=window_label)]
+                       "margin", REASSURING, when=window_label, method=how, notable=True)]
     return [_event(window_start, "Margin rate is stable", summary,
-                   "margin", REASSURING, when=window_label)]
+                   "margin", REASSURING, when=window_label, method=how)]
 
 
 def _discount_events(pack: dict) -> list[dict]:
@@ -350,19 +373,22 @@ def _discount_events(pack: dict) -> list[dict]:
 
     summary = (
         f"Average discount {_pct(baseline)} -> {_pct(discount.get('recent_avg_discount_pct'))} "
-        f"({_pp(discount.get('discount_pct_change_pp'))}, against a {threshold}pp threshold)."
+        f"({_pp(discount.get('discount_pct_change_pp'))})."
     )
+    how = (f"Creep threshold: {threshold}pp. Discount is revenue-weighted, so a deep discount on "
+           "a large line counts for more than the same discount on a small one.")
+
     if status == "creep_detected":
         detail = summary + " The same goods are being sold at a steadily deeper discount."
         if crossed:
-            detail += f" Discount first rose above its baseline band in {crossed} and stayed there."
+            detail += f" It first rose above its normal range in {crossed} and has stayed there since."
         return [_event(crossed or window_start, "Discount creeps upward", detail,
-                       "discount", CONCERN, when=crossed or window_label)]
+                       "discount", CONCERN, when=crossed or window_label, method=how)]
     if status == "discipline_improved":
         return [_event(window_start, "Discounting tightened", summary,
-                       "discount", REASSURING, when=window_label)]
+                       "discount", REASSURING, when=window_label, method=how, notable=True)]
     return [_event(window_start, "Discounting is stable", summary,
-                   "discount", REASSURING, when=window_label)]
+                   "discount", REASSURING, when=window_label, method=how)]
 
 
 def _tier_events(pack: dict) -> list[dict]:
@@ -392,22 +418,25 @@ def _tier_events(pack: dict) -> list[dict]:
 
     summary = (
         f"High-tier share of revenue {_pct(baseline_high)} -> {_pct(recent_shares.get('High'))} "
-        f"({_pp(change_pp)}, against a {threshold}pp threshold). "
+        f"({_pp(change_pp)}). "
         f"Low tier {_pct(baseline_shares.get('Low'))} -> {_pct(recent_shares.get('Low'))}."
     )
+    how = (f"Shift threshold: {threshold}pp. Direction decides the verdict — the same size of "
+           "move upward is premiumisation, not a downgrade.")
+
     if status == "downgrade_detected":
         detail = summary + " Value is moving out of the high tier and being backfilled by cheaper lines."
         if crossed:
-            detail += f" High-tier share first fell below its baseline band in {crossed} and stayed there."
+            detail += f" High-tier share first fell below its normal range in {crossed} and has stayed there since."
         return [_event(crossed or window_start, "Product mix downgrades", detail,
-                       "tier_mix", CONCERN, when=crossed or window_label)]
+                       "tier_mix", CONCERN, when=crossed or window_label, method=how)]
     if status == "premiumisation_detected":
         return [_event(window_start, "Product mix moves upmarket",
                        summary + " Value is moving INTO the high tier — this is premiumisation, "
                        "the opposite of a downgrade, and is good news.",
-                       "tier_mix", REASSURING, when=window_label)]
+                       "tier_mix", REASSURING, when=window_label, method=how, notable=True)]
     return [_event(window_start, "Product mix is stable", summary,
-                   "tier_mix", REASSURING, when=window_label)]
+                   "tier_mix", REASSURING, when=window_label, method=how)]
 
 
 def _defection_month(pack: dict, category: str, zeros: int) -> str | None:
@@ -459,11 +488,13 @@ def _category_events(pack: dict) -> list[dict]:
             detail += " The same dip occurred a year earlier — seasonal precedent found."
         elif echo == "not_present":
             detail += " No prior-year echo, so seasonality does not explain it."
-        if precedent == "insufficient_history":
-            detail += (" The stricter multi-year seasonal check needs about three years of history "
-                       "and could not run.")
         if recovered:
             detail += " This category has since recovered."
+
+        how = None
+        if precedent == "insufficient_history":
+            how = ("The stricter multi-year seasonal check needs about three years of history and "
+                   "could not run; the prior-year echo above is the check 24 months can support.")
 
         reads_as = REASSURING if (recovered or echo == "confirmed") else CONCERN
         if share is not None and share < 0.05 and reads_as == CONCERN:
@@ -472,7 +503,7 @@ def _category_events(pack: dict) -> list[dict]:
         events.append(_event(
             change.get("change_point_month"),
             f"{category} revenue steps down {_pct(change.get('pct_decline'))}",
-            detail, "category_mix", reads_as,
+            detail, "category_mix", reads_as, method=how,
         ))
 
     disappeared = [p for p in pack.get("product_changes") or [] if p["status"] == "disappeared"]
@@ -592,6 +623,40 @@ def _coverage_events(pack: dict) -> list[dict]:
     )]
 
 
+NO_BASELINE_HEADLINES = {
+    "Margin could not be compared": "margin",
+    "Discount could not be compared": "discount",
+    "Tier mix could not be compared": "tier mix",
+}
+
+
+def _merge_no_baseline_events(events: list[dict]) -> list[dict]:
+    """Collapse the per-dimension "could not be compared" rows into one.
+
+    On an account too new to have a baseline window, margin, discount and
+    tier mix each report the same single cause. Printed separately they read
+    as three findings and crowd out the one thing that matters — that the
+    history is too short to judge anything. Merged, the point is made once.
+    """
+    absent = [e for e in events if e["headline"] in NO_BASELINE_HEADLINES]
+    if len(absent) < 2:
+        return events
+
+    names = [NO_BASELINE_HEADLINES[e["headline"]] for e in absent]
+    listed = ", ".join(names[:-1]) + f" and {names[-1]}"
+    merged = _event(
+        None,
+        f"{listed.capitalize()} could not be compared",
+        "No baseline window exists on this account, so none of these dimensions can be "
+        "measured against a prior period. This is a limit of the history available, not a "
+        "finding that they are unchanged.",
+        "coverage", CONCERN,
+    )
+    first = events.index(absent[0])
+    remaining = [e for e in events if e["headline"] not in NO_BASELINE_HEADLINES]
+    return remaining[:first] + [merged] + remaining[first:]
+
+
 def build_timeline(evidence_pack: dict) -> list[dict]:
     """The full dated evidence log, in chronological order.
 
@@ -613,7 +678,7 @@ def build_timeline(evidence_pack: dict) -> list[dict]:
     )
     # "~" sorts after any "YYYY-MM", so undated events land at the end
     # without needing a separate list or a None-safe comparator.
-    return sorted(events, key=lambda e: e["month"] or "~")
+    return _merge_no_baseline_events(sorted(events, key=lambda e: e["month"] or "~"))
 
 
 def timeline_counts(timeline: list[dict]) -> dict:
